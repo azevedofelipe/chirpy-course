@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 	"sync/atomic"
 )
 
@@ -49,13 +50,11 @@ func handlerValidateChirp(w http.ResponseWriter, r *http.Request) {
 	}
 
 	type returnVals struct {
-		Error       string `json:"error"`
 		Valid       bool   `json:"valid"`
 		CleanedBody string `json:"cleaned_body"`
 	}
 
 	valid := true
-	error := ""
 	header := 200
 
 	decoder := json.NewDecoder(r.Body)
@@ -66,16 +65,18 @@ func handlerValidateChirp(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(500)
 		return
 	}
-	if len(params.Body) > 140 {
+	body := params.Body
+	if len(body) > 140 {
 		log.Print("Chirp is too long", err)
 		valid = false
-		error = "Chirp is too long"
 		header = 400
 	}
 
+	updated_body := checkProfanity(body)
+
 	respBody := returnVals{
-		Error: error,
-		Valid: valid,
+		Valid:       valid,
+		CleanedBody: updated_body,
 	}
 
 	dat, err := json.Marshal(respBody)
@@ -109,4 +110,18 @@ func (cfg *apiConfig) middlewareMetricsInc(next http.Handler) http.Handler {
 		cfg.fileServerHits.Add(1)
 		next.ServeHTTP(w, r)
 	})
+}
+
+func checkProfanity(s string) string {
+	profanity := []string{"kerfuffle", "sharbert", "fornax"}
+	words := strings.Split(s, " ")
+	for idx, word := range words {
+		for _, prof := range profanity {
+			if strings.ToLower(word) == prof {
+				words[idx] = "****"
+			}
+		}
+	}
+
+	return strings.Join(words, " ")
 }
