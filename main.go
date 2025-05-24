@@ -10,7 +10,9 @@ import (
 	"os"
 	"strings"
 	"sync/atomic"
+	"time"
 
+	"github.com/google/uuid"
 	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
 )
@@ -18,6 +20,14 @@ import (
 type apiConfig struct {
 	fileServerHits atomic.Int32
 	queries        *database.Queries
+	platform       string
+}
+
+type User struct {
+	ID        uuid.UUID `json:"id"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+	Email     string    `json:"email"`
 }
 
 func main() {
@@ -37,6 +47,7 @@ func main() {
 	apiCfg := apiConfig{
 		fileServerHits: atomic.Int32{},
 		queries:        dbQueries,
+		platform:       os.Getenv("PLATFORM"),
 	}
 
 	mux := http.NewServeMux()
@@ -45,6 +56,7 @@ func main() {
 	mux.HandleFunc("GET /admin/metrics", apiCfg.handlerHitCount)
 	mux.HandleFunc("POST /admin/reset", apiCfg.handlerResetCount)
 	mux.HandleFunc("POST /api/validate_chirp", handlerValidateChirp)
+	mux.HandleFunc("POST /api/users", apiCfg.handlerUserCreation)
 
 	srv := &http.Server{
 		Addr:    ":" + port,
@@ -60,6 +72,44 @@ func handlerReadiness(w http.ResponseWriter, r *http.Request) {
 	w.Header().Add("Content-Type", "text/plain; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte(http.StatusText(http.StatusOK)))
+}
+
+func (cfg *apiConfig) handlerUserCreation(w http.ResponseWriter, r *http.Request) {
+
+	type parameters struct {
+		Email string `json:"email"`
+	}
+
+	header := 201
+
+	decoder := json.NewDecoder(r.Body)
+	params := parameters{}
+	err := decoder.Decode(&params)
+	if err != nil {
+		log.Printf("Error reading json: %s", err)
+		w.WriteHeader(500)
+		return
+	}
+	log.Printf("Creating user with email, %s", params.Email)
+
+	user, err := cfg.queries.CreateUser(r.Context(), params.Email)
+	if err != nil {
+		log.Printf("Error creating user in database: %s", err)
+		w.WriteHeader(500)
+		return
+	}
+
+	dat, err := json.Marshal(user)
+	if err != nil {
+		log.Printf("Error marshalling json: %s", err)
+		w.WriteHeader(500)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(header)
+	w.Write(dat)
+
 }
 
 func handlerValidateChirp(w http.ResponseWriter, r *http.Request) {
@@ -118,9 +168,20 @@ func (cfg *apiConfig) handlerHitCount(w http.ResponseWriter, r *http.Request) {
 }
 
 func (cfg *apiConfig) handlerResetCount(w http.ResponseWriter, r *http.Request) {
-	cfg.fileServerHits.Store(0)
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("Hits reset to 0"))
+	if cfg.platform != "dev" {
+		w.WriteHeader(403)
+		return
+	}
+
+	err := cfg.queries.DeleteUsers(r.Context())
+	if err != nil {
+		log.Printf("Error deleting users: %s", err)
+		w.WriteHeader(500)
+		return
+	}
+	w.WriteHeader(200)
+	log.Print("All users deleted")
+	return
 }
 
 func (cfg *apiConfig) middlewareMetricsInc(next http.Handler) http.Handler {
