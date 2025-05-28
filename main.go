@@ -55,7 +55,8 @@ func main() {
 	mux.HandleFunc("GET /api/healthz", handlerReadiness)
 	mux.HandleFunc("GET /admin/metrics", apiCfg.handlerHitCount)
 	mux.HandleFunc("POST /admin/reset", apiCfg.handlerResetCount)
-	mux.HandleFunc("POST /api/validate_chirp", handlerValidateChirp)
+	mux.HandleFunc("POST /api/chirps", apiCfg.handlerCreateChirp)
+	mux.HandleFunc("GET /api/chirps", apiCfg.handlerGetChirps)
 	mux.HandleFunc("POST /api/users", apiCfg.handlerUserCreation)
 
 	srv := &http.Server{
@@ -112,17 +113,12 @@ func (cfg *apiConfig) handlerUserCreation(w http.ResponseWriter, r *http.Request
 
 }
 
-func handlerValidateChirp(w http.ResponseWriter, r *http.Request) {
+func (cfg *apiConfig) handlerCreateChirp(w http.ResponseWriter, r *http.Request) {
 	type parameters struct {
-		Body string `json:"body"`
+		Body   string    `json:"body"`
+		UserId uuid.UUID `json:"user_id"`
 	}
 
-	type returnVals struct {
-		Valid       bool   `json:"valid"`
-		CleanedBody string `json:"cleaned_body"`
-	}
-
-	valid := true
 	header := 200
 
 	decoder := json.NewDecoder(r.Body)
@@ -133,21 +129,23 @@ func handlerValidateChirp(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(500)
 		return
 	}
-	body := params.Body
-	if len(body) > 140 {
+
+	if len(params.Body) > 140 {
 		log.Print("Chirp is too long", err)
-		valid = false
 		header = 400
 	}
 
-	updated_body := checkProfanity(body)
-
-	respBody := returnVals{
-		Valid:       valid,
-		CleanedBody: updated_body,
+	chirp, err := cfg.queries.CreateChirp(r.Context(), database.CreateChirpParams{
+		Body:   params.Body,
+		UserID: params.UserId,
+	})
+	if err != nil {
+		log.Printf("Error creating chirp: %s", err)
+		w.WriteHeader(500)
+		return
 	}
 
-	dat, err := json.Marshal(respBody)
+	dat, err := json.Marshal(chirp)
 	if err != nil {
 		log.Printf("Error marshalling json: %s", err)
 		w.WriteHeader(500)
@@ -157,7 +155,6 @@ func handlerValidateChirp(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(header)
 	w.Write(dat)
-
 }
 
 func (cfg *apiConfig) handlerHitCount(w http.ResponseWriter, r *http.Request) {
