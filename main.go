@@ -30,6 +30,14 @@ type User struct {
 	Email     string    `json:"email"`
 }
 
+type Chirp struct {
+	ID        uuid.UUID `json:"id"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+	Body      string    `json:"body"`
+	UserID    uuid.UUID `json:"user_id"`
+}
+
 func main() {
 	godotenv.Load()
 
@@ -57,6 +65,7 @@ func main() {
 	mux.HandleFunc("POST /admin/reset", apiCfg.handlerResetCount)
 	mux.HandleFunc("POST /api/chirps", apiCfg.handlerCreateChirp)
 	mux.HandleFunc("GET /api/chirps", apiCfg.handlerGetChirps)
+	mux.HandleFunc("GET /api/chirps/{chirpID}", apiCfg.handlerGetChirpID)
 	mux.HandleFunc("POST /api/users", apiCfg.handlerUserCreation)
 
 	srv := &http.Server{
@@ -100,7 +109,14 @@ func (cfg *apiConfig) handlerUserCreation(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	dat, err := json.Marshal(user)
+	response := User{
+		ID:        user.ID,
+		CreatedAt: user.CreatedAt,
+		UpdatedAt: user.UpdatedAt,
+		Email:     user.Email,
+	}
+
+	dat, err := json.Marshal(response)
 	if err != nil {
 		log.Printf("Error marshalling json: %s", err)
 		w.WriteHeader(500)
@@ -164,8 +180,53 @@ func (cfg *apiConfig) handlerGetChirps(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(500)
 		return
 	}
+	response := make([]Chirp, len(chirps))
+	for i, chirp := range chirps {
+		response[i] = Chirp{
+			ID:        chirp.ID,
+			CreatedAt: chirp.CreatedAt,
+			UpdatedAt: chirp.UpdatedAt,
+			Body:      chirp.Body,
+			UserID:    chirp.UserID,
+		}
+	}
 
-	dat, err := json.Marshal(chirps)
+	dat, err := json.Marshal(response)
+	if err != nil {
+		log.Printf("Error marshalling json: %s", err)
+		w.WriteHeader(500)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	w.Write(dat)
+}
+
+func (cfg *apiConfig) handlerGetChirpID(w http.ResponseWriter, r *http.Request) {
+	chirp_id := r.PathValue("chirpID")
+	id, err := uuid.Parse(chirp_id)
+	if err != nil {
+		log.Printf("Error converting string to uuid: %s", err)
+		w.WriteHeader(500)
+		return
+	}
+
+	chirp, err := cfg.queries.GetChirpByID(r.Context(), id)
+	if err != nil {
+		log.Printf("Error getting chirps: %s", err)
+		w.WriteHeader(500)
+		return
+	}
+	response := Chirp{
+		ID:        chirp.ID,
+		CreatedAt: chirp.CreatedAt,
+		UpdatedAt: chirp.UpdatedAt,
+		Body:      chirp.Body,
+		UserID:    chirp.UserID,
+	}
+
+	dat, err := json.Marshal(response)
 	if err != nil {
 		log.Printf("Error marshalling json: %s", err)
 		w.WriteHeader(500)
