@@ -46,3 +46,26 @@ func (q *Queries) CreateToken(ctx context.Context, arg CreateTokenParams) (Refre
 	)
 	return i, err
 }
+
+const getUserFromRefreshToken = `-- name: GetUserFromRefreshToken :one
+SELECT 
+	users.id,
+	refresh_tokens.revoked_at,
+	refresh_tokens.expires_at
+FROM refresh_tokens 
+JOIN users ON refresh_tokens.user_id = users.id
+WHERE refresh_tokens.token = $1
+`
+
+type GetUserFromRefreshTokenRow struct {
+	ID        uuid.UUID
+	RevokedAt sql.NullTime
+	ExpiresAt time.Time
+}
+
+func (q *Queries) GetUserFromRefreshToken(ctx context.Context, token string) (GetUserFromRefreshTokenRow, error) {
+	row := q.db.QueryRowContext(ctx, getUserFromRefreshToken, token)
+	var i GetUserFromRefreshTokenRow
+	err := row.Scan(&i.ID, &i.RevokedAt, &i.ExpiresAt)
+	return i, err
+}

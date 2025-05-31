@@ -173,15 +173,40 @@ func (cfg *apiConfig) handlerUserLogin(w http.ResponseWriter, r *http.Request) {
 
 }
 
+func (cfg *apiConfig) handlerTokenRefresh(w http.ResponseWriter, r *http.Request) {
+	refreshToken, err := auth.GetBearerToken(r.Header)
+	if err != nil {
+		log.Printf("Error getting refresh token: %s", err)
+		w.WriteHeader(500)
+		return
+	}
+
+	userTokenData, err := cfg.queries.GetUserFromRefreshToken(r.Context(), refreshToken)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			log.Printf("No token found: %s", err)
+			w.WriteHeader(401)
+			return
+		}
+		log.Printf("Error finding refresh token and user: %s", err)
+		w.WriteHeader(500)
+		return
+	}
+
+	if userTokenData.ExpiresAt.Before(time.Now().UTC()) || userTokenData.RevokedAt.Valid {
+		log.Print("Refresh Token Invalid/n")
+		w.WriteHeader(401)
+		return
+	}
+
+	//Create JWT
+	jwToken, err := auth.MakeJWT(userTokenData.ID, cfg.tokenSecret)
 	if err != nil {
 		log.Printf("Error creating JWT: %s", err)
 		w.WriteHeader(500)
 		return
 	}
 
-	response := User{
-		ID:        user.ID,
-		CreatedAt: user.CreatedAt,
 	type Token struct {
 		JWToken string `json:"token"`
 	}
