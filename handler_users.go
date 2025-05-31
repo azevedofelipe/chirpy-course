@@ -1,7 +1,9 @@
 package main
 
 import (
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"log"
 	"main/internal/auth"
 	"main/internal/database"
@@ -17,7 +19,6 @@ type User struct {
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 	Email     string    `json:"email"`
-	Token     string    `json:"token"`
 }
 
 func (cfg *apiConfig) handlerUserCreation(w http.ResponseWriter, r *http.Request) {
@@ -80,10 +81,18 @@ func (cfg *apiConfig) handlerUserCreation(w http.ResponseWriter, r *http.Request
 
 func (cfg *apiConfig) handlerUserLogin(w http.ResponseWriter, r *http.Request) {
 
+	type userData struct {
+		ID           uuid.UUID `json:"id"`
+		CreatedAt    time.Time `json:"created_at"`
+		UpdatedAt    time.Time `json:"updated_at"`
+		Email        string    `json:"email"`
+		Token        string    `json:"token"`
+		RefreshToken string    `json:"refresh_token"`
+	}
+
 	type parameters struct {
-		Email         string `json:"email"`
-		Password      string `json:"password"`
-		ExpireSeconds int    `json:"expires_in_seconds"`
+		Email    string `json:"email"`
+		Password string `json:"password"`
 	}
 
 	decoder := json.NewDecoder(r.Body)
@@ -115,14 +124,55 @@ func (cfg *apiConfig) handlerUserLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// JWT expire time
-	expireTime := params.ExpireSeconds
-	if expireTime == 0 || expireTime > 3600 {
-		expireTime = 3600
+	// Create JWT
+	token, err := auth.MakeJWT(user.ID, cfg.tokenSecret)
+	if err != nil {
+		log.Printf("Error creating JWT: %s", err)
+		w.WriteHeader(500)
+		return
 	}
 
-	// Create JWT
-	token, err := auth.MakeJWT(user.ID, cfg.tokenSecret, time.Duration(expireTime)*time.Second)
+	// Create Refresh Token
+	refreshToken, err := auth.MakeRefreshToken()
+	if err != nil {
+		log.Printf("Error creating Refresh Token: %s", err)
+		w.WriteHeader(500)
+		return
+	}
+
+	refreshTokenJSON, err := cfg.queries.CreateToken(r.Context(), database.CreateTokenParams{
+		Token:     refreshToken,
+		UserID:    user.ID,
+		ExpiresAt: time.Now().UTC().Add(60 * 24 * time.Hour),
+	})
+	if err != nil {
+		log.Printf("Error creating Refresh Token: %s", err)
+		w.WriteHeader(500)
+		return
+	}
+
+	response := userData{
+		ID:           user.ID,
+		CreatedAt:    user.CreatedAt,
+		UpdatedAt:    user.UpdatedAt,
+		Email:        user.Email,
+		Token:        token,
+		RefreshToken: refreshTokenJSON.Token,
+	}
+
+	dat, err := json.Marshal(response)
+	if err != nil {
+		log.Printf("Error marshalling json: %s", err)
+		w.WriteHeader(500)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	w.Write(dat)
+
+}
+
 	if err != nil {
 		log.Printf("Error creating JWT: %s", err)
 		w.WriteHeader(500)
@@ -132,9 +182,12 @@ func (cfg *apiConfig) handlerUserLogin(w http.ResponseWriter, r *http.Request) {
 	response := User{
 		ID:        user.ID,
 		CreatedAt: user.CreatedAt,
-		UpdatedAt: user.UpdatedAt,
-		Email:     user.Email,
-		Token:     token,
+	type Token struct {
+		JWToken string `json:"token"`
+	}
+
+	response := Token{
+		JWToken: jwToken,
 	}
 
 	dat, err := json.Marshal(response)
