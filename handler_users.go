@@ -194,7 +194,7 @@ func (cfg *apiConfig) handlerTokenRefresh(w http.ResponseWriter, r *http.Request
 	}
 
 	if userTokenData.ExpiresAt.Before(time.Now().UTC()) || userTokenData.RevokedAt.Valid {
-		log.Print("Refresh Token Invalid/n")
+		log.Print("Refresh Token Invalid\n")
 		w.WriteHeader(401)
 		return
 	}
@@ -226,4 +226,23 @@ func (cfg *apiConfig) handlerTokenRefresh(w http.ResponseWriter, r *http.Request
 	w.WriteHeader(200)
 	w.Write(dat)
 
+}
+
+func (cfg *apiConfig) handlerTokenRevoke(w http.ResponseWriter, r *http.Request) {
+	refreshToken, err := auth.GetBearerToken(r.Header)
+	if err != nil {
+		log.Printf("Error getting refresh token from header: %s", err)
+		w.WriteHeader(500)
+		return
+	}
+
+	err = cfg.queries.RevokeToken(r.Context(), refreshToken)
+	if err != nil {
+		log.Printf("Error getting refresh token from header: %s", err)
+		w.WriteHeader(401)
+		w.Write([]byte("Invalid token"))
+		return
+	}
+
+	w.WriteHeader(204)
 }
