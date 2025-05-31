@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"log"
+	"main/internal/auth"
 	"main/internal/database"
 	"net/http"
 	"strings"
@@ -34,6 +35,27 @@ func (cfg *apiConfig) handlerCreateChirp(w http.ResponseWriter, r *http.Request)
 	if err != nil {
 		log.Printf("Error reading json: %s", err)
 		w.WriteHeader(500)
+		return
+	}
+
+	// Token Validation for user
+	token, err := auth.GetBearerToken(r.Header)
+	if err != nil {
+		log.Printf("Error getting bearer token: %s", err)
+		w.WriteHeader(500)
+		return
+	}
+
+	tokenUserID, err := auth.ValidateJWT(token, cfg.tokenSecret)
+	if err != nil {
+		log.Printf("Error validating JWT: %s", err)
+		w.WriteHeader(401)
+		return
+	}
+
+	if tokenUserID != params.UserId {
+		log.Printf("Error validating JWT, UserIDs dont match: %s", err)
+		w.WriteHeader(401)
 		return
 	}
 
