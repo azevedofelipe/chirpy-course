@@ -17,6 +17,7 @@ type User struct {
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 	Email     string    `json:"email"`
+	Token     string    `json:"token"`
 }
 
 func (cfg *apiConfig) handlerUserCreation(w http.ResponseWriter, r *http.Request) {
@@ -80,8 +81,9 @@ func (cfg *apiConfig) handlerUserCreation(w http.ResponseWriter, r *http.Request
 func (cfg *apiConfig) handlerUserLogin(w http.ResponseWriter, r *http.Request) {
 
 	type parameters struct {
-		Email    string `json:"email"`
-		Password string `json:"password"`
+		Email         string `json:"email"`
+		Password      string `json:"password"`
+		ExpireSeconds int    `json:"expires_in_seconds"`
 	}
 
 	decoder := json.NewDecoder(r.Body)
@@ -104,13 +106,6 @@ func (cfg *apiConfig) handlerUserLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	response := User{
-		ID:        user.ID,
-		CreatedAt: user.CreatedAt,
-		UpdatedAt: user.UpdatedAt,
-		Email:     user.Email,
-	}
-
 	err = auth.CheckPasswordHash(user.HashedPassword, params.Password)
 	if err != nil {
 		log.Printf("Error getting user in database: %s", err)
@@ -118,6 +113,28 @@ func (cfg *apiConfig) handlerUserLogin(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(401)
 		w.Write([]byte("Invalid email or password"))
 		return
+	}
+
+	// JWT expire time
+	expireTime := params.ExpireSeconds
+	if expireTime == 0 || expireTime > 3600 {
+		expireTime = 3600
+	}
+
+	// Create JWT
+	token, err := auth.MakeJWT(user.ID, cfg.tokenSecret, time.Duration(expireTime)*time.Second)
+	if err != nil {
+		log.Printf("Error creating JWT: %s", err)
+		w.WriteHeader(500)
+		return
+	}
+
+	response := User{
+		ID:        user.ID,
+		CreatedAt: user.CreatedAt,
+		UpdatedAt: user.UpdatedAt,
+		Email:     user.Email,
+		Token:     token,
 	}
 
 	dat, err := json.Marshal(response)

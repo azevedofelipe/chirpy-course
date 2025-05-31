@@ -16,6 +16,7 @@ type apiConfig struct {
 	fileServerHits atomic.Int32
 	queries        *database.Queries
 	platform       string
+	tokenSecret    string
 }
 
 func main() {
@@ -36,6 +37,7 @@ func main() {
 		fileServerHits: atomic.Int32{},
 		queries:        dbQueries,
 		platform:       os.Getenv("PLATFORM"),
+		tokenSecret:    os.Getenv("TOKEN_SECRET"),
 	}
 
 	mux := http.NewServeMux()
