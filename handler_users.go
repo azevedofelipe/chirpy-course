@@ -246,3 +246,72 @@ func (cfg *apiConfig) handlerTokenRevoke(w http.ResponseWriter, r *http.Request)
 
 	w.WriteHeader(204)
 }
+
+func (cfg *apiConfig) handlerUpdateUser(w http.ResponseWriter, r *http.Request) {
+
+	type parameters struct {
+		Email    string `json:"email"`
+		Password string `json:"password"`
+	}
+
+	decoder := json.NewDecoder(r.Body)
+	params := parameters{}
+	err := decoder.Decode(&params)
+	if err != nil {
+		log.Printf("Error reading input json: %s", err)
+		w.WriteHeader(500)
+		return
+	}
+
+	accessToken, err := auth.GetBearerToken(r.Header)
+	if err != nil {
+		log.Printf("Error getting bearer token: %s", err)
+		w.WriteHeader(401)
+		return
+	}
+
+	userID, err := auth.ValidateJWT(accessToken, cfg.tokenSecret)
+	if err != nil {
+		log.Printf("Error validating JWT: %s", err)
+		w.WriteHeader(401)
+		return
+	}
+
+	log.Print("Creating hashed password")
+	hashedPassword, err := auth.HashPassword(params.Password)
+	if err != nil {
+		log.Printf("Error hashing password: %s", err)
+		w.WriteHeader(500)
+		return
+	}
+
+	updatedUser, err := cfg.queries.UpdateUser(r.Context(), database.UpdateUserParams{
+		Email:          params.Email,
+		HashedPassword: hashedPassword,
+		ID:             userID,
+	})
+	if err != nil {
+		log.Printf("Error updating user: %s", err)
+		w.WriteHeader(500)
+		return
+	}
+
+	response := User{
+		ID:        updatedUser.ID,
+		CreatedAt: updatedUser.CreatedAt,
+		UpdatedAt: updatedUser.UpdatedAt,
+		Email:     updatedUser.Email,
+	}
+
+	dat, err := json.Marshal(response)
+	if err != nil {
+		log.Printf("Error marshalling response: %s", err)
+		w.WriteHeader(500)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(dat)
+	w.WriteHeader(200)
+
+}

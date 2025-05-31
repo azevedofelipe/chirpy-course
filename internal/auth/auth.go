@@ -45,7 +45,7 @@ func MakeJWT(userID uuid.UUID, tokenSecret string) (string, error) {
 	return signed, nil
 }
 
-func ValidateJWT(tokenString, tokenSecret string) (uuid.UUID, error) {
+func ValidateJWT(tokenString, tokenSecret string) (userID uuid.UUID, err error) {
 	type customClaims struct {
 		jwt.RegisteredClaims
 	}
@@ -55,20 +55,20 @@ func ValidateJWT(tokenString, tokenSecret string) (uuid.UUID, error) {
 	})
 
 	if err != nil {
-		return uuid.Nil, err
+		return
 	}
 
 	userIDString, err := token.Claims.GetSubject()
 	if err != nil {
-		return uuid.Nil, err
+		return
 	}
 
-	userID, err := uuid.Parse(userIDString)
+	userID, err = uuid.Parse(userIDString)
 	if err != nil {
-		return uuid.Nil, err
+		return
 	}
 
-	return userID, nil
+	return
 
 }
 
