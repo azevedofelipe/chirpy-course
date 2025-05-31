@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"net/http"
 	"testing"
 	"time"
 
@@ -33,5 +34,19 @@ func TestJWT(t *testing.T) {
 
 	if validatedID != userID {
 		t.Errorf("IDs não coincidem: esperado %v, obtido %v", userID, validatedID)
+	}
+}
+
+func TestGetBearerToken(t *testing.T) {
+	header := http.Header{}
+	header.Set("Authorization", "Bearer testing123")
+	wantToken := "testing123"
+	token, err := GetBearerToken(header)
+	if err != nil {
+		t.Errorf("Erro buscando token: %v", err)
+	}
+
+	if token != wantToken {
+		t.Errorf("expected token = %q, got = %q", wantToken, token)
 	}
 }
