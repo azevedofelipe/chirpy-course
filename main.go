@@ -3,13 +3,16 @@ package main
 import (
 	"database/sql"
 	"fmt"
-	"github.com/joho/godotenv"
-	_ "github.com/lib/pq"
 	"log"
+	"main/internal/auth"
 	"main/internal/database"
 	"net/http"
 	"os"
 	"sync/atomic"
+
+	"github.com/google/uuid"
+	"github.com/joho/godotenv"
+	_ "github.com/lib/pq"
 )
 
 type apiConfig struct {
@@ -49,6 +52,7 @@ func main() {
 	mux.HandleFunc("POST /api/chirps", apiCfg.handlerCreateChirp)
 	mux.HandleFunc("GET /api/chirps", apiCfg.handlerGetChirps)
 	mux.HandleFunc("GET /api/chirps/{chirpID}", apiCfg.handlerGetChirpID)
+	mux.HandleFunc("DELETE /api/chirps/{chirpID}", apiCfg.handlerDeleteChirpID)
 
 	mux.HandleFunc("POST /api/users", apiCfg.handlerUserCreation)
 	mux.HandleFunc("PUT /api/users", apiCfg.handlerUpdateUser)
@@ -101,4 +105,19 @@ func (cfg *apiConfig) middlewareMetricsInc(next http.Handler) http.Handler {
 		cfg.fileServerHits.Add(1)
 		next.ServeHTTP(w, r)
 	})
+}
+
+// Validate JWT from Header
+func (cfg *apiConfig) AuthorizeHeader(header http.Header) (userID uuid.UUID, err error) {
+	tokenString, err := auth.GetBearerToken(header)
+	if err != nil {
+		return
+	}
+
+	userID, err = auth.ValidateJWT(tokenString, cfg.tokenSecret)
+	if err != nil {
+		return
+	}
+
+	return
 }

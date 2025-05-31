@@ -164,3 +164,42 @@ func checkProfanity(s string) string {
 
 	return strings.Join(words, " ")
 }
+
+func (cfg *apiConfig) handlerDeleteChirpID(w http.ResponseWriter, r *http.Request) {
+	chirpIDString := r.PathValue("chirpID")
+	chirpID, err := uuid.Parse(chirpIDString)
+	if err != nil {
+		log.Printf("Error converting string to uuid: %s", err)
+		w.WriteHeader(500)
+		return
+	}
+
+	reqUserID, err := cfg.AuthorizeHeader(r.Header)
+	if err != nil {
+		log.Printf("Error authorizing header: %s", err)
+		w.WriteHeader(500)
+		return
+	}
+
+	chirp, err := cfg.queries.GetChirpByID(r.Context(), chirpID)
+	if err != nil {
+		log.Printf("Error getting chirp: %s", err)
+		w.WriteHeader(404)
+		return
+	}
+
+	if chirp.UserID != reqUserID {
+		log.Print("Invalid user")
+		w.WriteHeader(403)
+		return
+	}
+
+	err = cfg.queries.DeleteChirpByID(r.Context(), chirp.ID)
+	if err != nil {
+		log.Printf("Error deleting chirp: %v", err)
+		w.WriteHeader(403)
+		return
+	}
+
+	w.WriteHeader(204)
+}
