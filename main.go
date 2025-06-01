@@ -20,6 +20,7 @@ type apiConfig struct {
 	queries        *database.Queries
 	platform       string
 	tokenSecret    string
+	polkaKey       string
 }
 
 func main() {
@@ -41,6 +42,7 @@ func main() {
 		queries:        dbQueries,
 		platform:       os.Getenv("PLATFORM"),
 		tokenSecret:    os.Getenv("TOKEN_SECRET"),
+		polkaKey:       os.Getenv("POLKA_KEY"),
 	}
 
 	mux := http.NewServeMux()

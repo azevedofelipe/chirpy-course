@@ -90,3 +90,13 @@ func MakeRefreshToken() (string, error) {
 	return keyString, nil
 
 }
+
+func GetAPIKey(headers http.Header) (string, error) {
+	apiHeader := headers.Get("Authorization")
+	if apiHeader == "" {
+		return "", errors.New("Error getting API Key")
+	}
+	apiKey := strings.TrimPrefix(apiHeader, "ApiKey ")
+
+	return apiKey, nil
+}
