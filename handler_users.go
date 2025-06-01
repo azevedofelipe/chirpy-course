@@ -315,3 +315,45 @@ func (cfg *apiConfig) handlerUpdateUser(w http.ResponseWriter, r *http.Request) 
 	w.WriteHeader(200)
 
 }
+
+func (cfg *apiConfig) handlerRedWebhook(w http.ResponseWriter, r *http.Request) {
+	type parameters struct {
+		Event string `json:"event"`
+		Data  struct {
+			UserID string `json:"user_id"`
+		} `json:"data"`
+	}
+
+	decoder := json.NewDecoder(r.Body)
+	params := parameters{}
+	err := decoder.Decode(&params)
+	if err != nil {
+		log.Printf("Error reading input json: %s", err)
+		w.WriteHeader(500)
+		return
+	}
+
+	if params.Event != "user.upgraded" {
+		w.WriteHeader(204)
+		return
+	}
+
+	parsedID, err := uuid.Parse(params.Data.UserID)
+	if err != nil {
+		log.Printf("Error parsing uuid: %s", err)
+		w.WriteHeader(500)
+		return
+	}
+
+	err = cfg.queries.UpdateUserRedByID(r.Context(), parsedID)
+	if err != nil {
+		log.Printf("Error upgrading user: %s", err)
+		w.WriteHeader(404)
+		return
+	}
+
+	log.Printf("Sucessfully upgraded user")
+	w.WriteHeader(204)
+	return
+
+}
