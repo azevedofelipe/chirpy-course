@@ -6,6 +6,7 @@ import (
 	"main/internal/auth"
 	"main/internal/database"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 
@@ -87,12 +88,33 @@ func (cfg *apiConfig) handlerCreateChirp(w http.ResponseWriter, r *http.Request)
 }
 
 func (cfg *apiConfig) handlerGetChirps(w http.ResponseWriter, r *http.Request) {
-	chirps, err := cfg.queries.GetChirps(r.Context())
+
+	var chirps []database.Chirp
+	var err error
+
+	// Check for queries
+	authorID := r.URL.Query().Get("author_id")
+	chirpOrder := r.URL.Query().Get("sort")
+
+	if authorID != "" {
+		parsedAuthorID, err := uuid.Parse(authorID)
+		if err != nil {
+			log.Printf("Error parsing uuid: %s", err)
+			w.WriteHeader(500)
+			return
+		}
+		chirps, err = cfg.queries.GetUserChirps(r.Context(), parsedAuthorID)
+
+	} else {
+		chirps, err = cfg.queries.GetChirps(r.Context())
+	}
+
 	if err != nil {
 		log.Printf("Error getting chirps: %s", err)
 		w.WriteHeader(500)
 		return
 	}
+
 	response := make([]Chirp, len(chirps))
 	for i, chirp := range chirps {
 		response[i] = Chirp{
@@ -102,6 +124,13 @@ func (cfg *apiConfig) handlerGetChirps(w http.ResponseWriter, r *http.Request) {
 			Body:      chirp.Body,
 			UserID:    chirp.UserID,
 		}
+	}
+
+	// Sort chirps
+	if chirpOrder == "desc" {
+		sort.Slice(response, func(i, j int) bool { return response[i].CreatedAt.After(response[j].CreatedAt) })
+	} else {
+		sort.Slice(response, func(i, j int) bool { return response[i].CreatedAt.Before(response[j].CreatedAt) })
 	}
 
 	dat, err := json.Marshal(response)
